@@ -7,6 +7,7 @@
 #include <list>
 #include <ctime>
 
+
 using namespace std;
 
 string digits = ".0123456789 ";
@@ -34,46 +35,109 @@ void printlist()
 void parse()
 {
 	int64_t p;
+	int test;
 	valnode token;
-	string constructtoken;
-	constructtoken = Expr[0];  // could be -
+	string constructtoken = "";
 	p = 0;
-	while (p < Expr.length() - 1)
+	if (Expr[0] == '-')
 	{
+		constructtoken = "-";
 		p++;
+	}
+	while (p < Expr.length())
+	{
 		if (digits.find(Expr[p]) != string::npos)  // found digit
 		{
-			constructtoken = constructtoken + Expr[p];
+			constructtoken = constructtoken + Expr[p]; // make number
 		}
-		else
+		else // found operator
 		{
-			token.value = stod(constructtoken);
-			token.op = '#';  // storing number, so not an operation
-			parselist.push_back(token);
-			constructtoken = "";
+			if (constructtoken != "")
+			{
+				token.value = stod(constructtoken);
+				token.op = '#';  // storing number, so not an operation	
+				parselist.push_back(token);
+				constructtoken = "";
+			}
 			token.value = 0;
-			token.op = Expr[p];
+			token.op = Expr[p];  // *,+,/,-,),(
 			parselist.push_back(token);
-			p++;
-			constructtoken = constructtoken + Expr[p]; // next number could start with '-'
-		}
+			if (Expr[p] != ')')
+			{
+				if (Expr[p + 1] == '+') 
+				{
+					p++;
+				}  // ignore extra +
+				if (Expr[p + 1] == '-') // negative number
+				{
+					p++;
+					token.value = 0;
+					token.op = 'n'; // negative unary operator
+					parselist.push_back(token); // could be '(' following so don't try to construct number!
+				}
+			}
+		} 
+		p++;
 	}
-	token.value = stoi(constructtoken);
-	token.op = '#';
-	parselist.push_back(token);
+	if (constructtoken != "")
+	{
+		token.value = stod(constructtoken); // last token has to be a number or ')';
+		token.op = '#';
+		parselist.push_back(token);
+	}
 }
 
-double evallist()
+double evallist(list<valnode>::iterator starte, list<valnode>::iterator ende)
+// ende is    next(last node to be evaluated)   (just past ending of expression)
 {
 	undefined = false;
-	double num1, num2;
 	valnode token1, token2, token3, newtoken;
 	string test;
 	newtoken.op = '#';
 	list<valnode>::iterator e, etoken1, etoken2, etoken3;
-	e = parselist.begin();
+	// do negative operator
+	e = starte;
 	newtoken.value = (*e).value;
-	while (next(e, 1) != parselist.end())
+	while (next(e) != ende)
+	{
+		if (e->op == 'n')
+		{
+			etoken2 = next(e);
+			e->op = '#';
+			e->value = -1 * etoken2->value;
+			parselist.erase(etoken2);
+		}
+		if (next(e) != ende)
+		{e++;}
+	}
+	// do divide
+	e = starte;
+	newtoken.value = (*e).value;
+	while (next(e, 1) != ende)
+	{
+		etoken1 = e;
+		token1 = *e; // number
+		e++;
+		etoken2 = e;
+		token2 = *e; // operation
+		e++;
+		etoken3 = e;
+		token3 = *e; // number
+		if (token2.op == '/')
+		{
+			newtoken.op = '#';
+			if (token3.value == 0) { undefined = true; return 0; }
+			newtoken.value = token1.value / token3.value;
+			(*etoken1).op = newtoken.op;
+			(*etoken1).value = newtoken.value;
+			parselist.erase(etoken2, next(etoken3)); // removes everything *before* next(etoken3)
+			e = etoken1;
+		}
+	}
+    // do times
+	e = starte;
+	newtoken.value = (*e).value;
+	while (next(e, 1) != ende)
 	{
 		etoken1 = e;
 		token1 = *e; // number
@@ -88,15 +152,15 @@ double evallist()
 			newtoken.op = '#';
 			newtoken.value = token1.value * token3.value;
 			(*etoken1).op = newtoken.op;
-			(*etoken1).value = newtoken.value;
-			e = parselist.erase(etoken2); // erase returns new position of item following etoken2
-			parselist.erase(e++); // remove token 3 as well
+			(*etoken1).value = newtoken.value; 
+			parselist.erase(etoken2, next(etoken3)); // removes everything *before* next(etoken3)
 			e = etoken1;
 		}
 	}
-	e = parselist.begin();
+	// do minus
+	e = starte;
 	newtoken.value = (*e).value;
-	while (next(e, 1) != parselist.end())
+	while (next(e, 1) != ende)
 	{
 		etoken1 = e;
 		token1 = *e; // number
@@ -110,16 +174,16 @@ double evallist()
 		{
 			newtoken.op = '#';
 			newtoken.value = token1.value - token3.value;
-			(*etoken1).op = newtoken.op;
+			(*etoken1).op = newtoken.op;   
 			(*etoken1).value = newtoken.value;
-			e = parselist.erase(etoken2); // erase returns new position of item following etoken2
-			parselist.erase(e++); // remove token 3 as well
+			parselist.erase(etoken2, next(etoken3)); // removes everything *before* next(etoken3)
 			e = etoken1;
 		}
 	}
-	e = parselist.begin();
+	// do plus
+	e = starte;
 	newtoken.value = (*e).value;
-	while (next(e, 1) != parselist.end())
+	while (next(e,1) != ende)
 	{
 		etoken1 = e;
 		token1 = *e; // number
@@ -135,33 +199,68 @@ double evallist()
 			newtoken.value = token1.value + token3.value;
 			(*etoken1).op = newtoken.op;
 			(*etoken1).value = newtoken.value;
-			e = parselist.erase(etoken2); // erase returns new position of item following etoken2
-			parselist.erase(e++); // remove token 3 as well
+			parselist.erase(etoken2, next(etoken3)); // removes everything *before* next(etoken3)
 			e = etoken1;
 		}
 	}
 	return newtoken.value;
 }
 
+double evalbrackets()
+{
+	double myval=0;
+	list<valnode>::iterator e,f, eleftb, erightb, ende, starte;
+	e = parselist.begin();
+	while (e != parselist.end())
+	{
+		if (e->op == ')')
+		{
+			f = e;
+			while (f->op != '(' )
+			{
+				f--;
+			}
+			eleftb = f;
+			erightb = e;
+			starte = next(eleftb);
+			ende = erightb;
+			myval = evallist(starte, ende);
+			parselist.erase(erightb);
+			e=parselist.erase(eleftb);
+		}
+		e++;
+	}
+	starte = parselist.begin();
+	ende = parselist.end();
+	myval = evallist(starte, ende);
+	return myval;
+}
+
 int main(int argc, char* argv[], char* envp[])
 {
+	double expval=0;
+	list<valnode>::iterator ende;
 	cout.precision(15);
-	double mydouble = 1.3467;
-	long double mydoubledouble = 1.3467;
-	cout << "size of double = " << sizeof(mydouble) << " bytes \n";
-	cout << "size of long double = " << sizeof(mydoubledouble) << " bytes \n";
-	//Expr = "-2.0234*6.03734--8--5--1-6+-9*2--8*4+6";
-	fstream myfile;
-	myfile.open(argv[1], ios_base::in);
-	if (myfile.is_open())
-		getline(myfile, Expr);
-	myfile.close(); 
+	Expr = "7-((-9+1)/(7*12)+1)";
+	//fstream myfile;
+	//myfile.open(argv[1], ios_base::in);
+	//if (myfile.is_open())
+	//	getline(myfile, Expr);
+	//myfile.close(); 
 	cout << "exp = " << Expr << "\n";
 	clock_t starttime;
 	starttime = clock();
 	parse();
-	//printlist();
-	cout << "exp = " << evallist() << "\n";
+	printlist();
+	expval = evalbrackets();
+	if (undefined)
+	{
+		cout << "Error: Division by zero \n";
+	}
+	else
+	{
+		cout << "exp = " << expval << "\n";
+	}
 	cout << "time = " << clock() - starttime << "\n";
 
 }
